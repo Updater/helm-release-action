@@ -1,0 +1,40 @@
+---
+name: 'helm-release'
+
+description: 'Publish helm charts, and optionally publish pre-release versions'
+
+inputs:
+  helm-repo:
+    description: 'Name of Helm repository to push to'
+    required: false
+    default: "harbor"
+  pre-release:
+    description: 'Publish pre-release'
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Publish chart(s)
+      if: inputs.pre-release != 'true'
+      shell: bash
+      run: |
+        for chart in $(cat charts-changed.txt) ; do
+          echo "=== $chart"
+          helm dep update $chart
+          helm cm-push $chart harbor
+        done
+
+    - name: Publish pre-release chart(s)
+      if: inputs.pre-release == 'true'
+      shell: bash
+      run: |
+        PRE_VERSION="${GITHUB_REF_NAME_SLUG_URL}.${GITHUB_RUN_NUMBER}+${GITHUB_SHA_SHORT}"
+        echo PRE_VERSION="$PRE_VERSION"
+
+        for chart in $(cat charts-changed.txt) ; do
+          echo "=== $chart"
+          CHART_VERSION="$(cat $chart/Chart.yaml | egrep '^version:' | awk '{ print $2 }')"
+          helm cm-push $chart harbor --version ${CHART_VERSION}-${PRE_VERSION}
+        done
